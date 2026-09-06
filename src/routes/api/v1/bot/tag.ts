@@ -1,14 +1,47 @@
 import { Router } from "express";
-import type { Response } from "express";
 
-import { ApiError, NotImplementedError } from "@/errors";
+import { ApiError } from "@/errors";
+import { requireDiscordRevalidation } from "@/middleware/requireDiscordRevalidation";
+import {
+	type TagFilterParams,
+	type TagIdParams,
+	parseTagFilterParams,
+	parseTagId,
+	parseUpdateTagBody,
+} from "@/models/paramModels";
+import {
+	createTag,
+	getTagById,
+	getTags,
+	updateTag,
+} from "@/services/tagService";
 
 export const botTagRouter = Router();
 
-const notImplemented = (res: Response) =>
-  ApiError.sendError(res, new NotImplementedError());
+botTagRouter.get("/", async (req, res) => {
+	const filters = await parseTagFilterParams(
+		req.query as unknown as TagFilterParams,
+	);
+	const tags = await getTags(filters);
+	res.status(200).json(tags);
+});
 
-botTagRouter.get("/", (_req, res) => notImplemented(res));
-botTagRouter.get("/:id", (_req, res) => notImplemented(res));
-botTagRouter.post("/create", (_req, res) => notImplemented(res));
-botTagRouter.post("/update", (_req, res) => notImplemented(res));
+botTagRouter.get("/:id", async (req, res) => {
+	const tagId = await parseTagId(req.params as unknown as TagIdParams);
+	const tag = await getTagById(tagId);
+	if (!tag) {
+		throw new ApiError(`Tag with id ${tagId} not found`, 404);
+	}
+	res.status(200).json(tag);
+});
+
+botTagRouter.post("/create", requireDiscordRevalidation, async (req, res) => {
+	const createdTag = await createTag(req.body);
+	res.status(201).json(createdTag);
+});
+
+botTagRouter.post("/update", requireDiscordRevalidation, async (req, res) => {
+	const { tag, ...fields } = parseUpdateTagBody(req.body);
+	const updatedTag = await updateTag(tag, fields);
+	res.status(200).json(updatedTag);
+});

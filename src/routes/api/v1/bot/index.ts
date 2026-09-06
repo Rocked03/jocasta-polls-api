@@ -1,6 +1,5 @@
 import { Router } from "express";
 
-import { ApiError, NotImplementedError } from "@/errors";
 import { requireBotServiceToken } from "@/middleware/requireBotServiceToken";
 import { botPollRouter } from "./poll";
 import { botTagRouter } from "./tag";
@@ -15,6 +14,3 @@ botRouter.use("/polls", botPollRouter);
 botRouter.use("/tags", botTagRouter);
 botRouter.use("/guilds", botGuildRouter);
 botRouter.use("/discord", botDiscordRouter);
-botRouter.get("/events", (_req, res) =>
-  ApiError.sendError(res, new NotImplementedError()),
-);

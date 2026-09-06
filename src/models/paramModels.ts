@@ -224,6 +224,52 @@ export async function parseTagId(params: TagIdParams): Promise<Tag["tag"]> {
   return result.data.id;
 }
 
+const TagFilterParamsModel = z.object({
+  end_message_self_assign: BooleanFilter,
+  end_message_replace: BooleanFilter,
+});
+
+export interface TagFilterParams {
+  end_message_self_assign?: string;
+  end_message_replace?: string;
+}
+
+export async function parseTagFilterParams(
+  params: TagFilterParams
+): Promise<{ end_message_self_assign?: boolean; end_message_replace?: boolean }> {
+  const result = await TagFilterParamsModel.safeParseAsync(params);
+  if (!result.success) {
+    throw new BadRequestError(
+      "Invalid tag filter parameters",
+      result.error.issues
+    );
+  }
+
+  return result.data;
+}
+
+const GuildFilterParamsModel = z.object({
+  manage_channel_id: BigIntFilter.optional(),
+});
+
+export interface GuildFilterParams {
+  manage_channel_id?: string;
+}
+
+export async function parseGuildFilterParams(
+  params: GuildFilterParams
+): Promise<{ manage_channel_id?: bigint }> {
+  const result = await GuildFilterParamsModel.safeParseAsync(params);
+  if (!result.success) {
+    throw new BadRequestError(
+      "Invalid guild filter parameters",
+      result.error.issues
+    );
+  }
+
+  return result.data;
+}
+
 export interface UserIdParams {
   userId: string;
 }
@@ -263,6 +309,48 @@ export interface PublishBody {
 
 export interface CrosspostBody {
   message_id: string | bigint;
+}
+
+const UpdateTagBodyModel = z
+  .object({
+    tag: z.coerce.number().int().positive(),
+    name: z.string().optional(),
+    channel_id: BigIntFilter.optional(),
+    crosspost_channels: z.array(BigIntFilter).optional(),
+    crosspost_servers: z.array(BigIntFilter).optional(),
+    colour: z.coerce.number().int().nullable().optional(),
+    end_message: z.string().nullable().optional(),
+    end_message_latest_ids: z.array(BigIntFilter).optional(),
+    end_message_replace: z.boolean().optional(),
+    end_message_role_ids: z.array(BigIntFilter).optional(),
+    end_message_ping: z.boolean().optional(),
+    end_message_self_assign: z.boolean().optional(),
+    persistent: z.boolean().optional(),
+  })
+  .strict();
+
+export interface ParsedUpdateTagBody {
+  tag: number;
+  name?: string;
+  channel_id?: bigint;
+  crosspost_channels?: bigint[];
+  crosspost_servers?: bigint[];
+  colour?: number | null;
+  end_message?: string | null;
+  end_message_latest_ids?: bigint[];
+  end_message_replace?: boolean;
+  end_message_role_ids?: bigint[];
+  end_message_ping?: boolean;
+  end_message_self_assign?: boolean;
+  persistent?: boolean;
+}
+
+export function parseUpdateTagBody(body: unknown): ParsedUpdateTagBody {
+  const result = UpdateTagBodyModel.safeParse(body);
+  if (!result.success) {
+    throw new BadRequestError("Invalid tag update body", result.error.issues);
+  }
+  return result.data;
 }
 
 export async function parsePublishBody(body: PublishBody): Promise<{

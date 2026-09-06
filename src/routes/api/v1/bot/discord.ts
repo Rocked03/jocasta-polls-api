@@ -1,14 +1,29 @@
 import { Router } from "express";
-import type { Response } from "express";
 
-import { ApiError, NotImplementedError } from "@/errors";
+import config from "@/config";
+import { ApiError } from "@/errors";
+import { parseGuildId } from "@/models/paramModels";
+import {
+	fetchGuildChannels,
+	fetchGuildRoles,
+} from "@/services/discordService";
 
 export const botDiscordRouter = Router();
 
-const notImplemented = (res: Response) =>
-  ApiError.sendError(res, new NotImplementedError());
+botDiscordRouter.get("/guilds/:id/channels", async (req, res) => {
+	const guildId = await parseGuildId({ guildId: req.params.id });
+	if (guildId !== config.guildId) {
+		throw new ApiError("Guild not supported", 403);
+	}
+	const channels = await fetchGuildChannels(guildId.toString());
+	res.status(200).json(channels);
+});
 
-botDiscordRouter.get("/guilds/:id/channels", (_req, res) =>
-  notImplemented(res),
-);
-botDiscordRouter.get("/guilds/:id/roles", (_req, res) => notImplemented(res));
+botDiscordRouter.get("/guilds/:id/roles", async (req, res) => {
+	const guildId = await parseGuildId({ guildId: req.params.id });
+	if (guildId !== config.guildId) {
+		throw new ApiError("Guild not supported", 403);
+	}
+	const roles = await fetchGuildRoles(guildId.toString());
+	res.status(200).json(roles);
+});

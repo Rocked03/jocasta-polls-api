@@ -1,11 +1,22 @@
 import { prisma } from "@/client";
+import { BadRequestError, NotFoundError } from "@/errors";
 import type { Tag } from "@/types";
 
-export async function getTags(publishedOnly = false): Promise<Tag[]> {
+export interface TagFilterOptions {
+	publishedOnly?: boolean;
+	end_message_self_assign?: boolean;
+	end_message_replace?: boolean;
+}
+
+export async function getTags(options: TagFilterOptions = {}): Promise<Tag[]> {
 	const tags = await prisma.tag.findMany({
+		where: {
+			end_message_self_assign: options.end_message_self_assign,
+			end_message_replace: options.end_message_replace,
+		},
 		include: {
 			polls: {
-				where: publishedOnly ? { published: true } : {},
+				where: options.publishedOnly ? { published: true } : {},
 			orderBy: {
 				start_time: "desc",
 			},
@@ -37,4 +48,116 @@ export async function getTagById(id: number): Promise<Tag | null> {
 	if (!tag) return null;
 
 	return tag;
+}
+
+export interface TagCreateInput {
+	name?: unknown;
+	guild_id?: string | number | bigint;
+	channel_id?: string | number | bigint;
+	crosspost_channels?: Array<string | number | bigint>;
+	crosspost_servers?: Array<string | number | bigint>;
+	current_num?: number | null;
+	colour?: number | null;
+	end_message?: string | null;
+	end_message_latest_ids?: Array<string | number | bigint>;
+	end_message_replace?: boolean;
+	end_message_role_ids?: Array<string | number | bigint>;
+	end_message_ping?: boolean;
+	end_message_self_assign?: boolean;
+	persistent?: boolean;
+}
+
+export async function createTag(tagData: TagCreateInput): Promise<Tag> {
+	if (!tagData.name || typeof tagData.name !== "string") {
+		throw new BadRequestError("Tag name is required and must be a string");
+	}
+	if (!tagData.guild_id) {
+		throw new BadRequestError("guild_id is required");
+	}
+	if (!tagData.channel_id) {
+		throw new BadRequestError("channel_id is required");
+	}
+
+	const existingTag = await prisma.tag.findFirst({
+		where: {
+			guild_id: BigInt(tagData.guild_id),
+			name: tagData.name,
+		},
+	});
+
+	if (existingTag) {
+		throw new BadRequestError(
+			`Tag name "${tagData.name}" already exists in this guild`
+		);
+	}
+
+	let tagId: number;
+	while (true) {
+		tagId = Math.floor(Math.random() * 90000) + 10000;
+		const existing = await prisma.tag.findUnique({
+			where: { tag: tagId },
+		});
+		if (!existing) break;
+	}
+
+	const createdTag = await prisma.tag.create({
+		data: {
+			tag: tagId,
+			name: tagData.name,
+			guild_id: BigInt(tagData.guild_id),
+			channel_id: BigInt(tagData.channel_id),
+			crosspost_channels:
+				tagData.crosspost_channels?.map((id) => BigInt(id)) ?? [],
+			crosspost_servers:
+				tagData.crosspost_servers?.map((id) => BigInt(id)) ?? [],
+			current_num: tagData.current_num ?? null,
+			colour: tagData.colour ?? null,
+			end_message: tagData.end_message ?? null,
+			end_message_latest_ids:
+				tagData.end_message_latest_ids?.map((id) => BigInt(id)) ?? [],
+			end_message_replace: tagData.end_message_replace ?? false,
+			end_message_role_ids:
+				tagData.end_message_role_ids?.map((id) => BigInt(id)) ?? [],
+			end_message_ping: tagData.end_message_ping ?? false,
+			end_message_self_assign: tagData.end_message_self_assign ?? false,
+			persistent: tagData.persistent ?? true,
+		},
+	});
+
+	console.log(`Created tag "${createdTag.name}" with ID ${createdTag.tag}`);
+
+	return createdTag;
+}
+
+export interface TagUpdateInput {
+	name?: string;
+	channel_id?: bigint;
+	crosspost_channels?: bigint[];
+	crosspost_servers?: bigint[];
+	colour?: number | null;
+	end_message?: string | null;
+	end_message_latest_ids?: bigint[];
+	end_message_replace?: boolean;
+	end_message_role_ids?: bigint[];
+	end_message_ping?: boolean;
+	end_message_self_assign?: boolean;
+	persistent?: boolean;
+}
+
+export async function updateTag(
+	id: number,
+	data: TagUpdateInput
+): Promise<Tag> {
+	const existing = await prisma.tag.findUnique({
+		where: { tag: id },
+	});
+
+	if (!existing) {
+		throw new NotFoundError(`Tag with id ${id} not found`);
+	}
+
+	return prisma.tag.update({
+		where: { tag: id },
+		data,
+	});
 }

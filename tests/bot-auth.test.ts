@@ -12,11 +12,11 @@ beforeAll(async () => {
 });
 
 describe("bot service token auth", () => {
-  it("returns 501 for a valid token (stub beneath the gate)", async () => {
+  it("passes a valid token through the gate (200 from the tag list)", async () => {
     const response = await request(app)
       .get("/api/v1/bot/tags")
       .set("Authorization", `Bearer ${TOKEN}`);
-    expect(response.status).toBe(501);
+    expect(response.status).toBe(200);
   });
 
   it("rejects a missing Authorization header with 401", async () => {
@@ -54,12 +54,12 @@ describe("bot service token auth", () => {
     expect(response.status).toBe(400);
   });
 
-  it("accepts a snowflake X-Discord-User-Id (still 501)", async () => {
+  it("accepts a snowflake X-Discord-User-Id (still 200)", async () => {
     const response = await request(app)
       .get("/api/v1/bot/tags")
       .set("Authorization", `Bearer ${TOKEN}`)
       .set("X-Discord-User-Id", "281648235557421056");
-    expect(response.status).toBe(501);
+    expect(response.status).toBe(200);
   });
 
   it("returns 503 when no token is configured", async () => {

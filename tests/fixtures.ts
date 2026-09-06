@@ -4,8 +4,9 @@
  * Exports hand-tunable fixture data plus `createFixturePrisma()`, whose
  * delegates implement exactly the query shapes the services really
  * issue (pollService reads + writes / voteService reads + castVote
- * writes / tagService / guildService / the lifecycle publish path's
- * tag.update counter bump).
+ * writes / tagService reads + create/update / guildService reads
+ * incl. the manage_channel_id array-contains filter / the lifecycle
+ * publish path's tag.update counter bump).
  *
  * Design notes:
  * - Votes live flat in FIXTURE_VOTES; the poll delegates join them onto
@@ -212,7 +213,7 @@ export const FIXTURE_VOTES: FixtureVote[] = [
   { id: 6n, user_id: FIXTURE_THIRD_USER_ID, poll_id: 4, choice: 0 },
 ];
 
-// T1: persistent. T2: non-persistent.
+// T1: persistent, both end-message flags set. T2: non-persistent, neither.
 export const FIXTURE_TAGS: FixtureTag[] = [
   {
     tag: 1,
@@ -225,10 +226,10 @@ export const FIXTURE_TAGS: FixtureTag[] = [
     colour: null,
     end_message: null,
     end_message_latest_ids: [],
-    end_message_replace: false,
+    end_message_replace: true,
     end_message_role_ids: [],
     end_message_ping: false,
-    end_message_self_assign: false,
+    end_message_self_assign: true,
     persistent: true,
   },
   {
@@ -250,12 +251,24 @@ export const FIXTURE_TAGS: FixtureTag[] = [
   },
 ];
 
+export const FIXTURE_MANAGE_CHANNEL_A = 555000000000000001n;
+export const FIXTURE_MANAGE_CHANNEL_B = 555000000000000002n;
+export const FIXTURE_OTHER_GUILD_ID = 999999999999999999n;
+
 export const FIXTURE_GUILD_SETTINGS: FixtureGuildSettings[] = [
   {
     guild_id: FIXTURE_GUILD_ID,
     default_channel_id: 101n,
-    manage_channel_id: [],
+    manage_channel_id: [FIXTURE_MANAGE_CHANNEL_A],
     manager_role_id: [FIXTURE_MANAGER_ROLE_ID],
+    default_colour: null,
+    fallback_channel_id: null,
+  },
+  {
+    guild_id: FIXTURE_OTHER_GUILD_ID,
+    default_channel_id: 201n,
+    manage_channel_id: [FIXTURE_MANAGE_CHANNEL_B],
+    manager_role_id: [],
     default_colour: null,
     fallback_channel_id: null,
   },
@@ -733,10 +746,30 @@ async function voteDeleteMany(args: MockArgs): Promise<{ count: number }> {
   return { count: doomed.length };
 }
 
+function matchTag(tag: FixtureTag, where: unknown): boolean {
+  if (where === undefined) return true;
+  if (!isRecord(where)) return unsupported("tag where", where);
+  for (const [key, cond] of Object.entries(where)) {
+    if (cond === undefined) continue; // e.g. omitted filter options
+    let ok: boolean;
+    switch (key) {
+      case "end_message_self_assign":
+      case "end_message_replace":
+        ok = tag[key] === cond;
+        break;
+      default:
+        return unsupported(`tag where ${key}`, cond);
+    }
+    if (!ok) return false;
+  }
+  return true;
+}
+
 async function tagFindMany(args: MockArgs = {}): Promise<Row[]> {
+  const rows = FIXTURE_TAGS.filter((tag) => matchTag(tag, args.where));
   const include = args.include;
   if (include === undefined) {
-    return FIXTURE_TAGS.map((tag) => ({ ...tag }));
+    return rows.map((tag) => ({ ...tag }));
   }
   // tagService.getTags: include: { polls: { where, orderBy, take } }
   const pollsInclude = isRecord(include) ? include.polls : undefined;
@@ -756,7 +789,7 @@ async function tagFindMany(args: MockArgs = {}): Promise<Row[]> {
     return unsupported("tag.findMany include", include);
   }
   const dir = dirOf(pollsOrderBy.start_time);
-  return FIXTURE_TAGS.map((tag) => {
+  return rows.map((tag) => {
     const polls = FIXTURE_POLLS.filter(
       (poll) => poll.tag === tag.tag && matchPoll(poll, pollsWhere),
     )
@@ -772,6 +805,19 @@ async function tagFindUnique(args: MockArgs): Promise<Row | null> {
   const tagId = isRecord(where) && hasExactKeys(where, ["tag"]) ? where.tag : undefined;
   if (tagId === undefined) return unsupported("tag.findUnique where", where);
   const tag = FIXTURE_TAGS.find((tag) => tag.tag === tagId);
+  return tag === undefined ? null : { ...tag };
+}
+
+async function tagFindFirst(args: MockArgs): Promise<Row | null> {
+  const where = args.where;
+  const guildId = isRecord(where) ? where.guild_id : undefined;
+  const name = isRecord(where) ? where.name : undefined;
+  if (typeof guildId !== "bigint" || typeof name !== "string") {
+    return unsupported("tag.findFirst where", where);
+  }
+  const tag = FIXTURE_TAGS.find(
+    (tag) => tag.guild_id === guildId && tag.name === name,
+  );
   return tag === undefined ? null : { ...tag };
 }
 
@@ -833,8 +879,50 @@ async function tagUpdate(args: MockArgs): Promise<Row> {
   return { ...tag };
 }
 
-async function guildSettingsFindMany(): Promise<Row[]> {
-  return FIXTURE_GUILD_SETTINGS.map((guild) => ({ ...guild }));
+async function tagCreate(args: MockArgs): Promise<Row> {
+  const data = args.data;
+  if (
+    !isRecord(data) ||
+    !hasExactKeys(data, [...TAG_FIELD_NAMES]) ||
+    typeof data.tag !== "number" ||
+    typeof data.name !== "string" ||
+    typeof data.guild_id !== "bigint" ||
+    typeof data.channel_id !== "bigint"
+  ) {
+    return unsupported("tag.create data", data);
+  }
+  if (FIXTURE_TAGS.some((tag) => tag.tag === data.tag)) {
+    // Real prisma enforces the PK; mirror it so id collisions fail loudly.
+    throw new Error(
+      `fixture prisma mock: tag.create duplicate id ${data.tag} (PK)`,
+    );
+  }
+  const row = { ...data } as FixtureTag;
+  FIXTURE_TAGS.push(row);
+  return { ...row };
+}
+
+function matchGuild(guild: FixtureGuildSettings, where: unknown): boolean {
+  if (where === undefined) return true;
+  if (!isRecord(where)) return unsupported("guildSettings where", where);
+  for (const [key, cond] of Object.entries(where)) {
+    if (cond === undefined) continue; // e.g. omitted filter options
+    if (key !== "manage_channel_id") {
+      return unsupported(`guildSettings where ${key}`, cond);
+    }
+    const has = isRecord(cond) ? cond.has : undefined;
+    if (typeof has !== "bigint") {
+      return unsupported("guildSettings where manage_channel_id", cond);
+    }
+    if (!guild.manage_channel_id.includes(has)) return false;
+  }
+  return true;
+}
+
+async function guildSettingsFindMany(args: MockArgs = {}): Promise<Row[]> {
+  return FIXTURE_GUILD_SETTINGS.filter((guild) =>
+    matchGuild(guild, args.where),
+  ).map((guild) => ({ ...guild }));
 }
 
 async function guildSettingsFindUnique(args: MockArgs): Promise<Row | null> {
@@ -880,6 +968,8 @@ export function createFixturePrisma() {
     tag: {
       findMany: tagFindMany,
       findUnique: tagFindUnique,
+      findFirst: tagFindFirst,
+      create: tagCreate,
       update: tagUpdate,
     },
     guildSettings: {
