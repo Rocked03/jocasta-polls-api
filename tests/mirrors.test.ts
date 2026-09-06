@@ -10,6 +10,7 @@
  * gone (zero 501 stubs remain anywhere).
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import express from "express";
 import request from "supertest";
 import type { Express } from "express";
 
@@ -28,7 +29,20 @@ vi.mock("@/services/discordService", async (importOriginal) => {
   };
 });
 
+// The web write twin sits behind requireManagementPerms; stub the
+// session-side Discord checks so a faked session passes (the same
+// approach as writeServices.test.ts). Read assertions are unaffected:
+// the management flag only widens the polls include of the web tag
+// list, never which tags are returned.
+vi.mock("@/utils/checkDiscordMembership", () => ({
+  checkUserInServer: async () => true,
+  checkUserHasManagementPerms: async () => true,
+  attachManagementPermsFlag: async () => true,
+}));
+
 import { createApp } from "@/app";
+import { errorHandler } from "@/middleware/errorHandler";
+import { tagRouter } from "@/routes/api/v1/tag";
 import {
   FIXTURE_GUILD_ID,
   FIXTURE_GUILD_SETTINGS,
@@ -312,6 +326,45 @@ describe("bot tag mirrors", () => {
       .send({ tag: 1, current_num: 5 });
     expect(counter.status).toBe(400);
     expect(FIXTURE_TAGS.find((tag) => tag.tag === 1)?.current_num).toBe(1);
+  });
+});
+
+describe("web tag update twin (session + management perms)", () => {
+  let webApp: Express;
+
+  beforeAll(() => {
+    webApp = express();
+    webApp.use(express.json());
+    webApp.use((req, _res, next) => {
+      req.isAuthenticated = (() => true) as unknown as typeof req.isAuthenticated;
+      req.user = { id: USER, accessToken: "stub" };
+      next();
+    });
+    webApp.use(tagRouter);
+    webApp.use(errorHandler);
+  });
+
+  it("update: valid body -> 200 with the updated raw row", async () => {
+    const response = await request(webApp)
+      .post("/update")
+      .send({
+        tag: 1,
+        name: "T1 web renamed",
+        channel_id: "103",
+        end_message_ping: true,
+      });
+
+    expect(response.status).toBe(200);
+    assertTagRowShape(response.body);
+    expect(response.body.tag).toBe(1);
+    expect(response.body.name).toBe("T1 web renamed");
+    expect(response.body.channel_id).toBe("103");
+    expect(response.body.end_message_ping).toBe(true);
+
+    const stored = FIXTURE_TAGS.find((t) => t.tag === 1);
+    expect(stored?.name).toBe("T1 web renamed");
+    expect(stored?.channel_id).toBe(103n);
+    expect(stored?.end_message_ping).toBe(true);
   });
 });
 

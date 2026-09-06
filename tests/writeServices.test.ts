@@ -274,6 +274,13 @@ describe("createPolls", () => {
     expect(row.message_id).toBeNull();
   });
 
+  it("fallback is not client-settable: fallback true in the body stores false", async () => {
+    const [created] = await createPolls([baseCreate({ fallback: true })]);
+
+    expect(created.fallback).toBe(false);
+    expect(pollById(created.id).fallback).toBe(false);
+  });
+
   it("rejects a missing tag", async () => {
     const missing = createPolls([baseCreate({ tag: undefined })]);
     await expect(missing).rejects.toBeInstanceOf(BadRequestError);

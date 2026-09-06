@@ -146,7 +146,7 @@ export async function createPolls(
           show_question: poll.show_question ?? true,
           show_options: poll.show_options ?? true,
           show_voting: poll.show_voting ?? true,
-          fallback: poll.fallback ?? false,
+          fallback: false, // Not client-settable; no API write path
         },
         include: {
           tagRelation: true,

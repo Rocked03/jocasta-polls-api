@@ -4,8 +4,14 @@ import {
   type TagIdParams,
   parseTagFilterParams,
   parseTagId,
+  parseUpdateTagBody,
 } from "@/models/paramModels";
-import { createTag, getTagById, getTags } from "@/services/tagService";
+import {
+  createTag,
+  getTagById,
+  getTags,
+  updateTag,
+} from "@/services/tagService";
 import { attachManagementPermsFlag } from "@/utils/checkDiscordMembership";
 import { requireManagementPerms } from "@/middleware/requireAuth";
 import { Router } from "express";
@@ -45,6 +51,16 @@ tagRouter.post("/create", requireManagementPerms, async (req, res) => {
   try {
     const createdTag = await createTag(req.body);
     res.status(201).json(createdTag);
+  } catch (error) {
+    ApiError.sendError(res, error);
+  }
+});
+
+tagRouter.post("/update", requireManagementPerms, async (req, res) => {
+  try {
+    const { tag, ...fields } = parseUpdateTagBody(req.body);
+    const updatedTag = await updateTag(tag, fields);
+    res.status(200).json(updatedTag);
   } catch (error) {
     ApiError.sendError(res, error);
   }
