@@ -4,7 +4,8 @@
  * Exports hand-tunable fixture data plus `createFixturePrisma()`, whose
  * delegates implement exactly the query shapes the services really
  * issue (pollService reads + writes / voteService reads + castVote
- * writes / tagService / guildService).
+ * writes / tagService / guildService / the lifecycle publish path's
+ * tag.update counter bump).
  *
  * Design notes:
  * - Votes live flat in FIXTURE_VOTES; the poll delegates join them onto
@@ -774,6 +775,64 @@ async function tagFindUnique(args: MockArgs): Promise<Row | null> {
   return tag === undefined ? null : { ...tag };
 }
 
+const TAG_FIELD_NAMES = new Set([
+  "tag",
+  "name",
+  "guild_id",
+  "channel_id",
+  "crosspost_channels",
+  "crosspost_servers",
+  "current_num",
+  "colour",
+  "end_message",
+  "end_message_latest_ids",
+  "end_message_replace",
+  "end_message_role_ids",
+  "end_message_ping",
+  "end_message_self_assign",
+  "persistent",
+]);
+
+/**
+ * tag.update for the lifecycle publish path's atomic counter bump:
+ * supports plain values and the `{ increment: n }` atomic shape (the
+ * only atomic op the services issue). Mutates FIXTURE_TAGS in place
+ * like the other write delegates.
+ */
+async function tagUpdate(args: MockArgs): Promise<Row> {
+  const where = args.where;
+  const data = args.data;
+  const tagId = isRecord(where) && hasExactKeys(where, ["tag"]) ? where.tag : undefined;
+  if (tagId === undefined || !isRecord(data)) {
+    return unsupported("tag.update args", { where, data });
+  }
+  const tag = FIXTURE_TAGS.find((tag) => tag.tag === tagId);
+  if (tag === undefined) {
+    throw new Error(`fixture prisma mock: tag.update unknown id ${tagId}`);
+  }
+  const row = tag as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue; // prisma skips undefined fields
+    if (!TAG_FIELD_NAMES.has(key)) {
+      return unsupported("tag.update data key", { key, value });
+    }
+    if (isRecord(value) && hasExactKeys(value, ["increment"])) {
+      const current = row[key];
+      if (
+        typeof value.increment !== "number" ||
+        typeof current !== "number"
+      ) {
+        // matches SQL: NULL + n stays NULL — unsupported in fixtures
+        return unsupported("tag.update increment", { key, value });
+      }
+      row[key] = current + value.increment;
+    } else {
+      row[key] = value;
+    }
+  }
+  return { ...tag };
+}
+
 async function guildSettingsFindMany(): Promise<Row[]> {
   return FIXTURE_GUILD_SETTINGS.map((guild) => ({ ...guild }));
 }
@@ -821,6 +880,7 @@ export function createFixturePrisma() {
     tag: {
       findMany: tagFindMany,
       findUnique: tagFindUnique,
+      update: tagUpdate,
     },
     guildSettings: {
       findMany: guildSettingsFindMany,

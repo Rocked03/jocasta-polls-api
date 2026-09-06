@@ -14,6 +14,31 @@ import {
 } from "@/utils/validatePoll";
 
 /**
+ * Fields that only the lifecycle endpoints may write (publish owns
+ * num/message_id/crosspost_message_ids, create owns guild_id and
+ * fallback). Their presence in an update body fails loudly with the
+ * designated-endpoint message instead of silently stripping.
+ */
+export const RESTRICTED_UPDATE_FIELDS = [
+  "num",
+  "message_id",
+  "crosspost_message_ids",
+  "fallback",
+  "guild_id",
+] as const;
+
+export function assertNoRestrictedUpdateFields(input: object): void {
+  const record = input as Record<string, unknown>;
+  for (const field of RESTRICTED_UPDATE_FIELDS) {
+    if (record[field] !== undefined) {
+      throw new BadRequestError(
+        `'${field}' cannot be set via update; use the designated lifecycle endpoint`,
+      );
+    }
+  }
+}
+
+/**
  * Whitelisted bulk-update fields for updatePollsByTag: the update
  * route's accepted body minus num/message_id/crosspost_message_ids
  * (publish-side state) and tag (inherently unchanged when updating by
@@ -71,6 +96,10 @@ export async function createPolls(
 
     if (poll.tag === undefined) {
       throw new BadRequestError("Poll tag is required");
+    }
+
+    if (poll.guild_id === undefined) {
+      throw new BadRequestError("Poll guild_id must be a valid bigint");
     }
 
     if (poll.guild_id !== config.guildId) {
@@ -141,10 +170,14 @@ export async function createPolls(
 
 /**
  * Updates polls by id: bulk shape/guild validation, existence check, the
- * post-publish field matrix, then the update mapping (partial-preserve
- * for num/message_id/crossposts; start_time resolved via the `time`
- * alias; end_time freely editable in any state). Returns the updated
- * models with their vote relation; routes serialize.
+ * post-publish field matrix, then the update mapping (start_time
+ * resolved via the `time` alias; end_time freely editable in any
+ * state). The lifecycle-owned fields (num/message_id/crossposts) plus
+ * guild_id and fallback are rejected up front — publish/end/crosspost
+ * are their designated writers, create sets guild_id/fallback — and
+ * guild scoping is checked against the EXISTING polls since the input
+ * no longer carries guild_id. Returns the updated models with their
+ * vote relation; routes serialize.
  */
 export async function updatePolls(
   pollsData: PollWriteInput[],
@@ -153,29 +186,29 @@ export async function updatePolls(
     throw new BadRequestError("pollsData must be a non-empty array");
   }
 
-  // Convert string guild_id to bigint before validation
-  const normalizedPollsData = pollsData.map(normalizePollGuildId);
+  pollsData.forEach((poll) => {
+    // Fail fast on lifecycle-owned fields before any validation reads them
+    assertNoRestrictedUpdateFields(poll);
 
-  normalizedPollsData.forEach((poll) => {
     validatePoll(poll);
 
     resolveStartTime(poll);
-
-    if (poll.guild_id !== config.guildId) {
-      throw new ApiError("Cannot update polls for other guilds", 403);
-    }
   });
 
   const existingPolls = await getPollsFromList(
-    normalizedPollsData.map((poll) => poll.id!),
+    pollsData.map((poll) => poll.id!),
     true,
   );
-  if (existingPolls.length !== normalizedPollsData.length) {
+  if (existingPolls.length !== pollsData.length) {
     throw new NotFoundError("One or more polls not found");
   }
 
+  if (existingPolls.some((poll) => poll.guild_id !== config.guildId)) {
+    throw new ApiError("Cannot update polls for other guilds", 403);
+  }
+
   const tags = await getTags();
-  normalizedPollsData.forEach((poll) => {
+  pollsData.forEach((poll) => {
     validatePublishedPoll(poll, existingPolls.find((p) => p.id === poll.id)!);
 
     if (poll.tag !== undefined && !tags.some((tag) => tag.tag === poll.tag)) {
@@ -185,7 +218,7 @@ export async function updatePolls(
 
   // Update polls in database
   const updatedPolls = await Promise.all(
-    normalizedPollsData.map(async (poll) => {
+    pollsData.map(async (poll) => {
       const existingPoll = existingPolls.find((p) => p.id === poll.id);
       if (!existingPoll) {
         throw new NotFoundError(`Poll with id ${poll.id} not found`);
@@ -196,7 +229,6 @@ export async function updatePolls(
         where: { id: poll.id! },
         data: {
           question: poll.question,
-          guild_id: poll.guild_id,
           choices: poll.choices,
           tag: poll.tag,
           image: poll.image,
@@ -205,20 +237,11 @@ export async function updatePolls(
           show_question: poll.show_question,
           show_options: poll.show_options,
           show_voting: poll.show_voting,
-          fallback: poll.fallback,
-          // Only update these if provided (preserve existing values otherwise)
           ...(resolvedStart !== undefined && {
             start_time: coerceDate(resolvedStart),
           }),
           ...(poll.end_time !== undefined && {
             end_time: coerceDate(poll.end_time),
-          }),
-          ...(poll.num !== undefined && { num: poll.num }),
-          ...(poll.message_id && { message_id: BigInt(poll.message_id) }),
-          ...(poll.crosspost_message_ids && {
-            crosspost_message_ids: poll.crosspost_message_ids.map((id) =>
-              BigInt(id),
-            ),
           }),
           // Preserve published state from existing poll
           published: existingPoll.published,

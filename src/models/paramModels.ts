@@ -242,6 +242,50 @@ export async function parseUserId(
   return result.data.userId;
 }
 
+/**
+ * Bot lifecycle bodies: snowflakes arrive as strings via JSON, coerced
+ * to bigint (publish carries the initial crosspost id array; crosspost
+ * appends one; end takes no body at all).
+ */
+const PublishBodyModel = z.object({
+  message_id: BigIntFilter,
+  crosspost_message_ids: z.array(BigIntFilter),
+});
+
+const CrosspostBodyModel = z.object({
+  message_id: BigIntFilter,
+});
+
+export interface PublishBody {
+  message_id: string | bigint;
+  crosspost_message_ids: Array<string | bigint>;
+}
+
+export interface CrosspostBody {
+  message_id: string | bigint;
+}
+
+export async function parsePublishBody(body: PublishBody): Promise<{
+  message_id: bigint;
+  crosspost_message_ids: bigint[];
+}> {
+  const result = await PublishBodyModel.safeParseAsync(body);
+  if (!result.success) {
+    throw new BadRequestError("Invalid publish body", result.error.issues);
+  }
+  return result.data;
+}
+
+export async function parseCrosspostBody(
+  body: CrosspostBody,
+): Promise<{ message_id: bigint }> {
+  const result = await CrosspostBodyModel.safeParseAsync(body);
+  if (!result.success) {
+    throw new BadRequestError("Invalid crosspost body", result.error.issues);
+  }
+  return result.data;
+}
+
 export interface VoteParams {
   choice: string;
 }

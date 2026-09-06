@@ -92,7 +92,9 @@ export function validatePoll(poll: PollWriteInput) {
     throw new BadRequestError("All poll choices must be non-empty strings");
   }
 
-  if (poll.guild_id === undefined || typeof poll.guild_id !== "bigint") {
+  // Shape check only: presence is create's concern — tightened update
+  // inputs must omit guild_id entirely (see assertNoRestrictedUpdateFields).
+  if (poll.guild_id !== undefined && typeof poll.guild_id !== "bigint") {
     throw new BadRequestError("Poll guild_id must be a valid bigint");
   }
 

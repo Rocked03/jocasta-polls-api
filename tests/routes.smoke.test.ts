@@ -11,9 +11,8 @@ beforeAll(async () => {
 });
 
 const stubs: Array<{ method: "get" | "post"; path: string }> = [
-  { method: "post", path: "/api/v1/bot/polls/12345/publish" },
-  { method: "post", path: "/api/v1/bot/polls/12345/end" },
-  { method: "post", path: "/api/v1/bot/polls/12345/crosspost" },
+  // publish/end/crosspost were implemented in the lifecycle layer; they
+  // now 404 on a missing poll instead of 501 (covered in lifecycle.test.ts)
   { method: "get", path: "/api/v1/bot/tags" },
   { method: "get", path: "/api/v1/bot/tags/comic" },
   { method: "post", path: "/api/v1/bot/tags/create" },

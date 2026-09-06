@@ -87,13 +87,13 @@ function pollById(id: number): FixturePoll {
   return poll;
 }
 
-/** Full update-route-shaped input (validatePoll requires the base fields). */
+/** Full update-route-shaped input (validatePoll requires the base fields;
+ * guild_id is lifecycle-restricted and must be omitted on update). */
 function updateInput(id: number, overrides: Partial<PollWriteInput> = {}) {
   return {
     id,
     question: `Q${id}`,
     choices: ["choice 0", "choice 1"],
-    guild_id: FIXTURE_GUILD_ID,
     ...overrides,
   };
 }
@@ -425,7 +425,6 @@ describe("web write shims (POST /api/v1/polls/...)", () => {
         updateInput(3, {
           question: "P3 edited",
           choices: ["P3 choice 0", "P3 choice 1"],
-          guild_id: GUILD,
           tag: 2,
         }),
       ]);
@@ -439,7 +438,7 @@ describe("web write shims (POST /api/v1/polls/...)", () => {
   it("update: matrix rejections surface as 400", async () => {
     const response = await request(webApp)
       .post("/update")
-      .send([updateInput(1, { choices: ["a", "b", "c"], guild_id: GUILD })]);
+      .send([updateInput(1, { choices: ["a", "b", "c"] })]);
     expect(response.status).toBe(400);
     expect(response.body.message).toBe(
       "Cannot change the number of choices for a published poll",
@@ -507,7 +506,6 @@ describe("bot write shims (POST /api/v1/bot/polls/...)", () => {
         updateInput(3, {
           question: "bot edited",
           choices: ["P3 choice 0", "P3 choice 1"],
-          guild_id: GUILD,
           tag: 2,
         }),
       ]);
@@ -521,7 +519,7 @@ describe("bot write shims (POST /api/v1/bot/polls/...)", () => {
       .post("/api/v1/bot/polls/update")
       .set("Authorization", `Bearer ${TOKEN}`)
       .set("X-Discord-User-Id", USER)
-      .send([updateInput(1, { tag: 2, guild_id: GUILD })]);
+      .send([updateInput(1, { tag: 2 })]);
     expect(response.status).toBe(400);
     expect(response.body.message).toBe(
       "Cannot change the tag of a published poll",
@@ -572,9 +570,9 @@ describe("bot write shims (POST /api/v1/bot/polls/...)", () => {
       .post("/api/v1/bot/polls/update-by-tag")
       .set("Authorization", `Bearer ${TOKEN}`)
       .set("X-Discord-User-Id", USER)
-      .send({ tag: 2, question: "renamed", num: 5 });
+      .send({ tag: 2, question: "renamed", bogus: true });
     expect(response.status).toBe(400);
-    expect(response.body.message).toBe("Unknown fields: num");
+    expect(response.body.message).toBe("Unknown fields: bogus");
     expect(pollById(3).num).toBeNull();
   });
 });

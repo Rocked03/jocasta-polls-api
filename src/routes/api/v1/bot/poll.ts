@@ -1,30 +1,34 @@
 import { Router } from "express";
-import type { Response } from "express";
 import { z } from "zod";
 
 import { getBotContext } from "@/context/botContext";
-import {
-  ApiError,
-  BadRequestError,
-  NotFoundError,
-  NotImplementedError,
-} from "@/errors";
+import { BadRequestError, NotFoundError } from "@/errors";
 import { requireDiscordRevalidation } from "@/middleware/requireDiscordRevalidation";
 import {
+  type CrosspostBody,
   type GuildIdParams,
   type PollFilterParams,
   type PollIdParams,
+  type PublishBody,
   type UserIdParams,
   type VoteParams,
   parseChoice,
+  parseCrosspostBody,
   parseGuildId,
   parsePollFilterParams,
   parsePollId,
+  parsePublishBody,
   parseUserId,
 } from "@/models/paramModels";
+import {
+  crosspostPoll,
+  endPoll,
+  publishPoll,
+} from "@/services/pollLifecycleService";
 import { getPollById, getPolls } from "@/services/pollReadService";
 import { serializePoll } from "@/services/pollSerializer";
 import {
+  RESTRICTED_UPDATE_FIELDS,
   createPolls,
   deletePolls,
   updatePolls,
@@ -33,9 +37,6 @@ import {
 import { castVote, getVotesByPoll, getVotesByUser } from "@/services/voteService";
 
 export const botPollRouter = Router();
-
-const notImplemented = (res: Response) =>
-  ApiError.sendError(res, new NotImplementedError());
 
 function pollFilterOptions(params: PollFilterParams) {
   return {
@@ -55,9 +56,10 @@ function pollFilterOptions(params: PollFilterParams) {
   };
 }
 
-// Bot update-by-tag body: the tag plus the whitelisted bulk fields
-// (anything else — num, message_id, crosspost_message_ids, tag-targeting
-// tricks — is rejected with the offending key names).
+// Bot update-by-tag body: the tag plus the whitelisted bulk fields.
+// Anything else is rejected with the offending key names — except the
+// lifecycle-owned fields (num, message_id, crosspost_message_ids,
+// fallback, guild_id), which name the designated lifecycle endpoint.
 const UpdateByTagBody = z
   .object({
     tag: z.number().int().nonnegative(),
@@ -86,6 +88,16 @@ function parseUpdateByTagBody(body: unknown) {
         return Array.isArray(keys) ? (keys as string[]) : [];
       });
     if (unknownKeys.length > 0) {
+      // The lifecycle-owned fields get the designated-endpoint message
+      // instead of the generic unknown-fields one.
+      const lifecycleField = unknownKeys.find((key) =>
+        (RESTRICTED_UPDATE_FIELDS as readonly string[]).includes(key),
+      );
+      if (lifecycleField !== undefined) {
+        throw new BadRequestError(
+          `'${lifecycleField}' cannot be set via update; use the designated lifecycle endpoint`,
+        );
+      }
       throw new BadRequestError(`Unknown fields: ${unknownKeys.join(", ")}`);
     }
     throw new BadRequestError(
@@ -201,6 +213,26 @@ botPollRouter.post("/:pollId/vote", async (req, res) => {
   );
   res.status(200).json({ votes, total_votes });
 });
-botPollRouter.post("/:pollId/publish", (_req, res) => notImplemented(res));
-botPollRouter.post("/:pollId/end", (_req, res) => notImplemented(res));
-botPollRouter.post("/:pollId/crosspost", (_req, res) => notImplemented(res));
+// Lifecycle shims: system ops performed by the bot itself, so unlike
+// the edit-family writes they mount NO Discord revalidation (and need
+// no acting-user header) — mirroring the old stubs' trusted position
+// beneath the tree-wide service-token gate.
+botPollRouter.post("/:pollId/publish", async (req, res) => {
+  const pollId = await parsePollId(req.params as PollIdParams);
+  const { message_id, crosspost_message_ids } = await parsePublishBody(
+    req.body as PublishBody,
+  );
+  const poll = await publishPoll(pollId, { message_id, crosspost_message_ids });
+  res.status(200).json(poll);
+});
+botPollRouter.post("/:pollId/end", async (req, res) => {
+  const pollId = await parsePollId(req.params as PollIdParams);
+  const poll = await endPoll(pollId);
+  res.status(200).json(poll);
+});
+botPollRouter.post("/:pollId/crosspost", async (req, res) => {
+  const pollId = await parsePollId(req.params as PollIdParams);
+  const { message_id } = await parseCrosspostBody(req.body as CrosspostBody);
+  const poll = await crosspostPoll(pollId, message_id);
+  res.status(200).json(poll);
+});
