@@ -6,7 +6,6 @@ import { BadRequestError, NotFoundError } from "@/errors";
 import { requireDiscordRevalidation } from "@/middleware/requireDiscordRevalidation";
 import {
   type CrosspostBody,
-  type GuildIdParams,
   type PollFilterParams,
   type PollIdParams,
   type PublishBody,

@@ -1,7 +1,5 @@
 import { ApiError } from "@/errors";
 import {
-	type GuildFilterParams,
-	type GuildIdParams,
 	parseGuildFilterParams,
 	parseGuildId,
 } from "@/models/paramModels";

@@ -1,16 +1,14 @@
 import { ApiError, NotFoundError } from "@/errors";
 import { requireAuth, requireManagementPerms } from "@/middleware/requireAuth";
 import {
-  type GuildIdParams,
   parseGuildId,
   parsePollFilterParams,
   parsePollId,
   parseUserId,
   parseChoice,
-  type PollFilterParams,
   type PollIdParams,
   type UserIdParams,
-  VoteParams,
+  type VoteParams,
 } from "@/models/paramModels";
 import { getPollById, getPolls } from "@/services/pollReadService";
 import { serializePoll } from "@/services/pollSerializer";
@@ -21,7 +19,6 @@ import {
   getVotesByPoll,
   getVotesByUser,
 } from "@/services/voteService";
-import { OrderType, OrderDir } from "@/types";
 import { attachManagementPermsFlag } from "@/utils/checkDiscordMembership";
 import { Router } from "express";
 

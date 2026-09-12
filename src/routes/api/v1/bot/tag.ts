@@ -3,8 +3,6 @@ import { Router } from "express";
 import { ApiError } from "@/errors";
 import { requireDiscordRevalidation } from "@/middleware/requireDiscordRevalidation";
 import {
-	type TagFilterParams,
-	type TagIdParams,
 	parseTagFilterParams,
 	parseTagId,
 	parseUpdateTagBody,
