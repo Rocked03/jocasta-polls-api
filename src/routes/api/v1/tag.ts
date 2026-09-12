@@ -1,7 +1,5 @@
 import { ApiError } from "@/errors";
 import {
-  type TagFilterParams,
-  type TagIdParams,
   parseTagFilterParams,
   parseTagId,
   parseUpdateTagBody,

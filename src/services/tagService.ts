@@ -2,6 +2,7 @@ import { prisma } from "@/client";
 import { BadRequestError, NotFoundError } from "@/errors";
 import { Prisma } from "@/generated/prisma/client";
 import type { Tag } from "@/types";
+import { emitBotEvent } from "@/websocket/botEventEmitter";
 
 export interface TagFilterOptions {
 	publishedOnly?: boolean;
@@ -127,6 +128,8 @@ export async function createTag(tagData: TagCreateInput): Promise<Tag> {
 
 	console.log(`Created tag "${createdTag.name}" with ID ${createdTag.tag}`);
 
+	emitBotEvent("tags", "create", createdTag.tag);
+
 	return createdTag;
 }
 
@@ -189,8 +192,12 @@ export async function updateTag(
 		}
 	}
 
-	return prisma.tag.update({
+	const updatedTag = await prisma.tag.update({
 		where: { tag: id },
 		data,
 	});
+
+	emitBotEvent("tags", "update", id);
+
+	return updatedTag;
 }

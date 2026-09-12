@@ -11,7 +11,7 @@ authRouter.get("/", passport.authenticate("discord"));
 authRouter.get(
   "/callback",
   passport.authenticate("discord", { failureRedirect: "/" }),
-  async (req, res) => {
+  async (_req, res) => {
     res.redirect(`${config.frontendUrl}/polls`);
   }
 );

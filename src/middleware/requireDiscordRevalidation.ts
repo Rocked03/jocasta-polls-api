@@ -16,7 +16,7 @@ import { getGuildById } from "@/services/guildService";
  * -> 403. Votes and reads stay trusted.
  */
 export const requireDiscordRevalidation: RequestHandler = async (
-  req,
+  _req,
   _res,
   next,
 ) => {

@@ -15,7 +15,7 @@ const discordStrategy = new DiscordStrategy(
     callbackURL: config.auth.discord.redirectUri,
     scope: ["identify", "guilds", "guilds.members.read"],
   },
-  (accessToken, refreshToken, profile, done) => {
+  (accessToken, _refreshToken, profile, done) => {
     const discordProfile = profile as DiscordUserProfile;
     discordProfile.accessToken = accessToken;
     done(null, discordProfile);

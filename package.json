@@ -39,6 +39,7 @@
     "passport-discord": "^0.1.4",
     "prisma": "^7.10.0",
     "redis": "^5.8.2",
+    "ws": "^8.21.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -50,6 +51,7 @@
     "@types/passport": "^1.0.17",
     "@types/passport-discord": "^0.1.14",
     "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.58.0",
     "@typescript-eslint/parser": "^8.58.0",
     "eslint": "^10.2.0",

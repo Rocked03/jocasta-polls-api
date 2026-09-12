@@ -5,6 +5,7 @@ import {
   serializePoll,
 } from "@/services/pollSerializer";
 import type { Poll } from "@/types";
+import { emitBotEvent } from "@/websocket/botEventEmitter";
 
 /**
  * Lifecycle transitions (publish/end/crosspost): the designated writers
@@ -71,6 +72,7 @@ export async function publishPoll(
     },
     include: POLL_WITH_VOTES_INCLUDE,
   });
+  emitBotEvent("polls", "update", pollId);
   console.log(`Published poll ${pollId} as num ${tag.current_num}`);
   return serializePoll(updated);
 }
@@ -93,6 +95,7 @@ export async function endPoll(pollId: number): Promise<Poll> {
     data: { end_time: new Date() },
     include: POLL_WITH_VOTES_INCLUDE,
   });
+  emitBotEvent("polls", "update", pollId);
   console.log(`Ended poll ${pollId}`);
   return serializePoll(updated);
 }
@@ -118,6 +121,7 @@ export async function crosspostPoll(
     data: { crosspost_message_ids: [...poll.crosspost_message_ids, messageId] },
     include: POLL_WITH_VOTES_INCLUDE,
   });
+  emitBotEvent("polls", "update", pollId);
   console.log(`Crossposted poll ${pollId} to message ${messageId}`);
   return serializePoll(updated);
 }

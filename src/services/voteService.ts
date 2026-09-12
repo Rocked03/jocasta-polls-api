@@ -1,6 +1,7 @@
 import { prisma } from "@/client";
 import { BadRequestError, ForbiddenError, NotFoundError } from "@/errors";
 import type { Vote } from "@/types";
+import { emitBotEvent } from "@/websocket/botEventEmitter";
 
 export async function getVote(
   pollId: number,
@@ -102,6 +103,7 @@ export async function castVote(
         where: { user_id: userId, poll_id: pollId },
       });
       deleted = true;
+      emitBotEvent("votes", "delete", pollId);
     }
   } else {
     if (choice < 0 || choice >= poll.choices.length) {
@@ -112,6 +114,7 @@ export async function castVote(
         where: { id: existingVote.id },
         data: { choice },
       });
+      emitBotEvent("votes", "update", pollId);
     } else {
       await prisma.vote.create({
         data: {
@@ -121,6 +124,7 @@ export async function castVote(
           choice,
         },
       });
+      emitBotEvent("votes", "create", pollId);
     }
   }
 

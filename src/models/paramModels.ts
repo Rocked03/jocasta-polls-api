@@ -209,10 +209,6 @@ export async function parsePollFilterParams(
   return parsed;
 }
 
-export interface TagIdParams {
-  id: string;
-}
-
 export async function parseTagId(params: unknown): Promise<Tag["tag"]> {
   const result = await TagIdParamModel.safeParseAsync(params);
   if (!result.success) {
@@ -229,11 +225,6 @@ const TagFilterParamsModel = z.object({
   end_message_self_assign: BooleanFilter,
   end_message_replace: BooleanFilter,
 });
-
-export interface TagFilterParams {
-  end_message_self_assign?: string;
-  end_message_replace?: string;
-}
 
 export async function parseTagFilterParams(
   params: unknown
@@ -252,10 +243,6 @@ export async function parseTagFilterParams(
 const GuildFilterParamsModel = z.object({
   manage_channel_id: BigIntFilter.optional(),
 });
-
-export interface GuildFilterParams {
-  manage_channel_id?: string;
-}
 
 export async function parseGuildFilterParams(
   params: unknown
