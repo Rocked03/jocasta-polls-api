@@ -13,7 +13,7 @@ export const guildRouter = Router();
 guildRouter.get("/", async (req, res) => {
 	try {
 		const { manage_channel_id } = await parseGuildFilterParams(
-			req.query as unknown as GuildFilterParams,
+			req.query,
 		);
 		const guilds = await getGuilds({ manage_channel_id });
 		res.status(200).json(guilds);
@@ -23,7 +23,7 @@ guildRouter.get("/", async (req, res) => {
 });
 guildRouter.get("/:guildId", async (req, res) => {
 	try {
-		const guildId = await parseGuildId(req.params as unknown as GuildIdParams);
+		const guildId = await parseGuildId(req.params);
 		const guild = await getGuildById(guildId);
 		if (!guild) {
 			throw new ApiError(`Guild with id ${guildId} not found`, 404);

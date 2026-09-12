@@ -28,7 +28,7 @@ import { Router } from "express";
 export const pollRouter = Router();
 
 pollRouter.get("/", async (req, res) => {
-  const guildId = await parseGuildId(req.query as unknown as GuildIdParams);
+  const guildId = await parseGuildId(req.query);
   const {
     published,
     tag,
@@ -46,7 +46,7 @@ pollRouter.get("/", async (req, res) => {
     order,
     orderDir,
     seed,
-  } = await parsePollFilterParams(req.query as unknown as PollFilterParams);
+  } = await parsePollFilterParams(req.query);
 
   let hasManagementPerms = false;
 
@@ -138,7 +138,7 @@ pollRouter.get("/:pollId/votes/:userId", async (req, res) => {
 });
 
 pollRouter.post("/:pollId/vote", requireAuth, async (req, res) => {
-  const pollId = await parsePollId(req.params as unknown as PollIdParams);
+  const pollId = await parsePollId(req.params);
   const userId = await parseUserId(req.body as UserIdParams);
   const choice = await parseChoice(req.body as VoteParams);
 

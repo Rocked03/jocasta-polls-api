@@ -109,9 +109,9 @@ function parseUpdateByTagBody(body: unknown) {
 }
 
 botPollRouter.get("/sync", async (req, res) => {
-  const guildId = await parseGuildId(req.query as unknown as GuildIdParams);
+  const guildId = await parseGuildId(req.query);
   const params = await parsePollFilterParams(
-    req.query as unknown as PollFilterParams,
+    req.query,
   );
   const { data, meta } = await getPolls({
     guildId,
@@ -141,9 +141,9 @@ botPollRouter.post(
 );
 
 botPollRouter.get("/", async (req, res) => {
-  const guildId = await parseGuildId(req.query as unknown as GuildIdParams);
+  const guildId = await parseGuildId(req.query);
   const params = await parsePollFilterParams(
-    req.query as unknown as PollFilterParams,
+    req.query,
   );
   const { data, meta } = await getPolls({
     guildId,

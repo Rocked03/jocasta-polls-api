@@ -81,12 +81,12 @@ export interface GuildIdParams {
 }
 
 export async function parseGuildId(
-  params: GuildIdParams
+  params: unknown
 ): Promise<Poll["guild_id"]> {
   const result = await GuildIdParamModel.safeParseAsync(params);
   if (!result.success) {
     throw new BadRequestError(
-      `${params.guildId} is not a valid guild id`,
+      `${String((params as Record<string, unknown>).guildId)} is not a valid guild id`,
       result.error.issues
     );
   }
@@ -98,11 +98,11 @@ export interface PollIdParams {
   pollId: string;
 }
 
-export async function parsePollId(params: PollIdParams): Promise<Poll["id"]> {
+export async function parsePollId(params: unknown): Promise<Poll["id"]> {
   const result = await PollIdParamModel.safeParseAsync(params);
   if (!result.success) {
     throw new BadRequestError(
-      `${params.pollId} is not a valid poll id`,
+      `${String((params as Record<string, unknown>).pollId)} is not a valid poll id`,
       result.error.issues
     );
   }
@@ -131,7 +131,7 @@ export interface PollFilterParams {
 }
 
 export async function parsePollFilterParams(
-  params: PollFilterParams
+  params: unknown
 ): Promise<PollFilterParams> {
   const result = await PollFilterParamsModel.safeParseAsync(params);
 
@@ -212,11 +212,11 @@ export interface TagIdParams {
   id: string;
 }
 
-export async function parseTagId(params: TagIdParams): Promise<Tag["tag"]> {
+export async function parseTagId(params: unknown): Promise<Tag["tag"]> {
   const result = await TagIdParamModel.safeParseAsync(params);
   if (!result.success) {
     throw new BadRequestError(
-      `${params.id} is not a valid tag id`,
+      `${String((params as Record<string, unknown>).id)} is not a valid tag id`,
       result.error.issues
     );
   }
@@ -235,7 +235,7 @@ export interface TagFilterParams {
 }
 
 export async function parseTagFilterParams(
-  params: TagFilterParams
+  params: unknown
 ): Promise<{ end_message_self_assign?: boolean; end_message_replace?: boolean }> {
   const result = await TagFilterParamsModel.safeParseAsync(params);
   if (!result.success) {
@@ -257,7 +257,7 @@ export interface GuildFilterParams {
 }
 
 export async function parseGuildFilterParams(
-  params: GuildFilterParams
+  params: unknown
 ): Promise<{ manage_channel_id?: bigint }> {
   const result = await GuildFilterParamsModel.safeParseAsync(params);
   if (!result.success) {
@@ -275,12 +275,12 @@ export interface UserIdParams {
 }
 
 export async function parseUserId(
-  params: UserIdParams
+  params: unknown
 ): Promise<Vote["user_id"]> {
   const result = await UserIdParamModel.safeParseAsync(params);
   if (!result.success) {
     throw new BadRequestError(
-      `${params.userId} is not a valid user id`,
+      `${String((params as Record<string, unknown>).userId)} is not a valid user id`,
       result.error.issues
     );
   }
@@ -353,7 +353,7 @@ export function parseUpdateTagBody(body: unknown): ParsedUpdateTagBody {
   return result.data;
 }
 
-export async function parsePublishBody(body: PublishBody): Promise<{
+export async function parsePublishBody(body: unknown): Promise<{
   message_id: bigint;
   crosspost_message_ids: bigint[];
 }> {
@@ -365,7 +365,7 @@ export async function parsePublishBody(body: PublishBody): Promise<{
 }
 
 export async function parseCrosspostBody(
-  body: CrosspostBody,
+  body: unknown,
 ): Promise<{ message_id: bigint }> {
   const result = await CrosspostBodyModel.safeParseAsync(body);
   if (!result.success) {
@@ -379,12 +379,12 @@ export interface VoteParams {
 }
 
 export async function parseChoice(
-  params: VoteParams
+  params: unknown
 ): Promise<Vote["choice"] | null> {
   const result = await ChoiceParamModel.safeParseAsync(params);
   if (!result.success) {
     throw new BadRequestError(
-      `${params.choice} is not a valid choice`,
+      `${String((params as Record<string, unknown>).choice)} is not a valid choice`,
       result.error.issues
     );
   }

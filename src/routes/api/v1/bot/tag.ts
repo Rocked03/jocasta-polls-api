@@ -20,14 +20,14 @@ export const botTagRouter = Router();
 
 botTagRouter.get("/", async (req, res) => {
 	const filters = await parseTagFilterParams(
-		req.query as unknown as TagFilterParams,
+		req.query,
 	);
 	const tags = await getTags(filters);
 	res.status(200).json(tags);
 });
 
 botTagRouter.get("/:id", async (req, res) => {
-	const tagId = await parseTagId(req.params as unknown as TagIdParams);
+	const tagId = await parseTagId(req.params);
 	const tag = await getTagById(tagId);
 	if (!tag) {
 		throw new ApiError(`Tag with id ${tagId} not found`, 404);

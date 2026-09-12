@@ -21,7 +21,7 @@ export const tagRouter = Router();
 tagRouter.get("/", async (req, res) => {
   try {
     const filters = await parseTagFilterParams(
-      req.query as unknown as TagFilterParams
+      req.query
     );
     const hasManagementPerms = await attachManagementPermsFlag(req);
     const tags = await getTags({
@@ -36,7 +36,7 @@ tagRouter.get("/", async (req, res) => {
 
 tagRouter.get("/:tagId", async (req, res) => {
   try {
-    const tagId = await parseTagId(req.params as unknown as TagIdParams);
+    const tagId = await parseTagId(req.params);
     const tag = await getTagById(tagId);
     if (!tag) {
       throw new ApiError(`Tag with id ${tagId} not found`, 404);
