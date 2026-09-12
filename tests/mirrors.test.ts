@@ -576,7 +576,7 @@ describe("api surface (relocated from the deleted smoke suite)", () => {
     expect(response.status).toBe(404);
   });
 
-  it("bot events is no longer a 501 stub: authenticated unknown bot route -> 404", async () => {
+  it("bot events is a WS-upgrade-only path: plain HTTP GET -> 404 (handshake covered in websocket.test.ts)", async () => {
     const response = await request(app)
       .get("/api/v1/bot/events")
       .set("Authorization", `Bearer ${TOKEN}`);
