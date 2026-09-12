@@ -152,6 +152,41 @@ describe("bot events websocket", () => {
     expect(await waitForStatus(ws)).toBe(401);
   });
 
+  it("destroys the socket on a malformed request-target without crashing the server", async () => {
+    const net = await import("node:net");
+    const port = (server.address() as AddressInfo).port;
+    const result = await new Promise<string>((resolve) => {
+      const sock = net.connect(port, "127.0.0.1", () => {
+        sock.write(
+          "GET // HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n",
+        );
+      });
+      sock.on("close", () => resolve("closed"));
+      sock.on("error", () => resolve("errored"));
+      setTimeout(() => resolve("timeout"), 2000);
+    });
+    expect(result).not.toBe("timeout");
+
+    // The server must still be alive and accepting valid connections
+    await connectAndHandshake(baseUrl);
+  });
+
+  it("destroys the socket on a non-events upgrade path (no dangling sockets)", async () => {
+    const net = await import("node:net");
+    const port = (server.address() as AddressInfo).port;
+    const result = await new Promise<string>((resolve) => {
+      const sock = net.connect(port, "127.0.0.1", () => {
+        sock.write(
+          "GET /api/v1/bot/other HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n",
+        );
+      });
+      sock.on("close", () => resolve("closed"));
+      sock.on("error", () => resolve("errored"));
+      setTimeout(() => resolve("timeout"), 2000);
+    });
+    expect(result).not.toBe("timeout");
+  });
+
   it("delivers emitBotEvent frames with the locked shape (no ALS context = web write)", async () => {
     const ws = await connectAndHandshake(baseUrl);
 

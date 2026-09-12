@@ -30,8 +30,17 @@ export function attachBotEventsServer(
   const clients = new Set<BotClient>();
 
   server.on("upgrade", (req, socket, head) => {
-    const url = new URL(req.url ?? "", "http://localhost");
-    if (url.pathname !== BOT_EVENTS_PATH) return;
+    let pathname: string;
+    try {
+      pathname = new URL(req.url ?? "", "http://localhost").pathname;
+    } catch {
+      socket.destroy();
+      return;
+    }
+    if (pathname !== BOT_EVENTS_PATH) {
+      socket.destroy();
+      return;
+    }
 
     const auth = req.headers.authorization;
     if (!auth?.startsWith("Bearer ") || !verifyBotServiceToken(auth.slice(7))) {
