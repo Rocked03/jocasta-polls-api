@@ -16,6 +16,7 @@ import {
   validatePoll,
   validatePublishedPoll,
 } from "@/utils/validatePoll";
+import { emitBotEvent } from "@/websocket/botEventEmitter";
 
 /**
  * Fields explicitly editable via /update. Everything else on the model
@@ -178,6 +179,8 @@ export async function createPolls(
     }),
   );
 
+  createdPolls.forEach((poll) => emitBotEvent("polls", "create", poll.id));
+
   console.log(
     `Created ${createdPolls.length} polls: ${createdPolls
       .map((p) => `"${p.question}"`)
@@ -268,6 +271,7 @@ export async function updatePolls(
       });
     }),
   );
+  updatedPolls.forEach((poll) => emitBotEvent("polls", "update", poll.id));
   console.log(
     `Updated ${updatedPolls.length} polls: ${updatedPolls
       .map((p) => `"${p.question}"`)
@@ -315,6 +319,8 @@ export async function deletePolls(
   if (deletedPolls.count === 0) {
     throw new NotFoundError("No polls found with the provided IDs");
   }
+
+  polls.forEach((poll) => emitBotEvent("polls", "delete", poll.id));
 
   console.log(`Deleted ${deletedPolls.count} polls with IDs: ${ids.join(", ")}`);
   return deletedPolls;
@@ -383,6 +389,7 @@ export async function updatePollsByTag(
     ),
   );
 
+  updatedPolls.forEach((poll) => emitBotEvent("polls", "update", poll.id));
   console.log(
     `Updated ${updatedPolls.length} polls by tag ${tag}: ${updatedPolls
       .map((p) => `"${p.question}"`)
