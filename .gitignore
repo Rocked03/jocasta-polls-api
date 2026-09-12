@@ -140,3 +140,6 @@ dist
 # Session storage
 sessions/
 temp/
+
+# local scratch
+.superpowers/

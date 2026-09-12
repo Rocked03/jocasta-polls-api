@@ -1,16 +1,10 @@
-import { Prisma, type polls } from "@prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/client";
+import { type PollFilterUser, buildPollAuxFilters } from "@/services/pollFilters";
+import { serializePoll } from "@/services/pollSerializer";
 import type { Meta, Poll } from "@/types";
 import { OrderDir, OrderType } from "@/types";
-
-/**
- * User filtering options for polls
- */
-export interface PollFilterUser {
-  userId: bigint;
-  notVoted?: boolean;
-}
 
 /**
  * Comprehensive filtering and pagination options for poll queries
@@ -19,6 +13,12 @@ interface PollFilters {
   guildId: bigint;
   published?: boolean;
   tag?: number;
+  ids?: number[];
+  num?: number;
+  active?: boolean;
+  has_start?: boolean;
+  has_end?: boolean;
+  live?: boolean;
   user?: PollFilterUser;
   search?: string;
   page?: number;
@@ -28,13 +28,6 @@ interface PollFilters {
   orderDir?: OrderDir;
   seed?: number;
 }
-
-/**
- * Extended poll type that includes vote relation data for processing
- */
-type PollWithVotes = polls & { votesRelation: { choice: number }[] };
-
-// ===== UTILITY FUNCTIONS =====
 
 /**
  * Sanitizes search input for safe use in database queries
@@ -75,30 +68,6 @@ function createPaginationMeta(
 }
 
 /**
- * Tallies votes for a poll and returns the poll with vote counts
- */
-function tallyPollVotes(poll: PollWithVotes): Poll {
-  const { votesRelation, ...restPoll } = poll;
-  const voteTally = new Array(poll.choices.length).fill(0);
-
-  for (const vote of votesRelation) {
-    if (vote.choice >= 0 && vote.choice < voteTally.length) {
-      voteTally[vote.choice]++;
-    }
-  }
-
-  const totalVotes = voteTally.reduce((sum, count) => sum + count, 0);
-
-  return {
-    ...restPoll,
-    votes: voteTally,
-    total_votes: totalVotes,
-  };
-}
-
-// ===== QUERY BUILDERS =====
-
-/**
  * Builds Prisma where conditions for poll filtering
  */
 function buildPollFilters(options: {
@@ -116,7 +85,7 @@ function buildPollFilters(options: {
     ...(tag !== undefined ? { tag } : {}),
     ...(user
       ? {
-          votesRelation: user.notVoted
+          votes: user.notVoted
             ? { none: { user_id: user.userId } }
             : { some: { user_id: user.userId } },
         }
@@ -149,7 +118,7 @@ function buildPollFilters(options: {
 async function getUserVotedPollIds(user?: PollFilterUser) {
   if (!user) return null;
 
-  const votedPolls = await prisma.pollsvotes.findMany({
+  const votedPolls = await prisma.vote.findMany({
     where: { user_id: user.userId },
     select: { poll_id: true },
   });
@@ -174,15 +143,19 @@ function getOrderDirection(orderDir?: OrderDir): "asc" | "desc" {
   return orderDir === OrderDir.Asc ? "asc" : "desc";
 }
 
-// ===== MAIN SERVICE FUNCTIONS =====
-
 /**
  * Retrieves polls with filtering, pagination, and sorting options
  */
 export async function getPolls({
   guildId,
-  published = true,
+  published,
   tag,
+  ids,
+  num,
+  active,
+  has_start,
+  has_end,
+  live,
   user,
   search,
   page = 1,
@@ -192,6 +165,7 @@ export async function getPolls({
   orderDir,
   seed,
 }: PollFilters): Promise<{ data: Poll[]; meta: Meta }> {
+  const now = new Date();
   const searchQuery = search ? sanitizeSearchInput(search) : undefined;
   const filters = buildPollFilters({
     published,
@@ -200,9 +174,23 @@ export async function getPolls({
     user,
     searchQuery,
   });
+  const conjuncts = buildPollAuxFilters(
+    {
+      ids,
+      num,
+      active,
+      has_start,
+      has_end,
+      live,
+    },
+    now,
+  );
+  // Conjunct-array composition: aux filters are AND-appended so no
+  // fragment ever writes a top-level OR into the shared filters.
+  filters.AND = [...((filters.AND as unknown[]) ?? []), ...conjuncts];
 
   // Get total count for pagination
-  const total = await prisma.polls.count({ where: filters });
+  const total = await prisma.poll.count({ where: filters });
 
   let data: Poll[] = [];
   let randomSeed: number | undefined = undefined;
@@ -219,7 +207,9 @@ export async function getPolls({
       published,
       tag,
       searchQuery,
+      ids,
       seed,
+      now,
     });
 
     data = result.data;
@@ -231,6 +221,7 @@ export async function getPolls({
       page,
       limit,
       orderDir,
+      now,
     });
   }
 
@@ -254,7 +245,9 @@ async function handleSpecialOrderingQueries({
   published,
   tag,
   searchQuery,
+  ids,
   seed,
+  now,
 }: {
   filters: any;
   user?: PollFilterUser;
@@ -266,7 +259,9 @@ async function handleSpecialOrderingQueries({
   published?: boolean;
   tag?: number;
   searchQuery?: string;
+  ids?: number[];
   seed?: number;
+  now: Date;
 }): Promise<{ data: Poll[]; randomSeed?: number }> {
   const offset = (page - 1) * limit;
 
@@ -280,54 +275,54 @@ async function handleSpecialOrderingQueries({
   }
 
   if (order === OrderType.Votes) {
-    return await handleVoteOrderedQuery({ filters, limit, offset, orderDir });
+    return await handleVoteOrderedQuery({
+      filters,
+      limit,
+      offset,
+      orderDir,
+      now,
+    });
   } else {
     return await handleRandomOrderedQuery({
       guildId,
       published,
       tag,
       searchQuery,
+      ids,
       filters,
       limit,
       offset,
       seed,
+      now,
     });
   }
 }
 
 /**
- * Handles vote count ordering using polls_view for efficient database-level sorting
+ * Handles vote count ordering with database-level count sorting
  */
 async function handleVoteOrderedQuery({
   filters,
   limit,
   offset,
   orderDir,
+  now,
 }: {
   filters: any;
   limit: number;
   offset: number;
   orderDir?: OrderDir;
+  now: Date;
 }): Promise<{ data: Poll[] }> {
-  // Use polls_view for efficient vote count sorting at database level
-  const pollsFromView = await prisma.polls_view.findMany({
+  const polls = await prisma.poll.findMany({
     where: filters,
     take: limit,
     skip: offset,
     orderBy: {
-      vote_count: getOrderDirection(orderDir),
-    },
-  });
-
-  // Get the poll IDs to fetch full poll data with vote details
-  const pollIds = pollsFromView.map((p) => p.id);
-
-  const polls = await prisma.polls.findMany({
-    where: {
-      id: { in: pollIds },
+      votes: { _count: getOrderDirection(orderDir) },
     },
     include: {
-      votesRelation: {
+      votes: {
         select: {
           choice: true,
         },
@@ -335,11 +330,7 @@ async function handleVoteOrderedQuery({
     },
   });
 
-  // Create a map for efficient lookup and maintain sort order from polls_view
-  const pollMap = new Map(polls.map((poll) => [poll.id, poll]));
-  const orderedPolls = pollIds.map((id) => pollMap.get(id)!);
-
-  return { data: orderedPolls.map(tallyPollVotes) };
+  return { data: polls.map((poll) => serializePoll(poll, now)) };
 }
 
 /**
@@ -350,19 +341,23 @@ async function handleRandomOrderedQuery({
   published,
   tag,
   searchQuery,
+  ids,
   filters,
   limit,
   offset,
   seed,
+  now,
 }: {
   guildId: bigint;
   published?: boolean;
   tag?: number;
   searchQuery?: string;
+  ids?: number[];
   filters: any;
   limit: number;
   offset: number;
   seed?: number;
+  now: Date;
 }): Promise<{ data: Poll[]; randomSeed: number }> {
   const randomSeed =
     typeof seed === "number"
@@ -381,6 +376,11 @@ async function handleRandomOrderedQuery({
           : Prisma.empty
       }
       ${
+        ids?.length
+          ? Prisma.sql`AND id = ANY(${ids})`
+          : Prisma.empty
+      }
+      ${
         filters.id
           ? filters.id.in
             ? Prisma.sql`AND id = ANY(${filters.id.in})`
@@ -393,12 +393,12 @@ async function handleRandomOrderedQuery({
   );
 
   // Fetch full poll data with votes
-  const polls = await prisma.polls.findMany({
+  const polls = await prisma.poll.findMany({
     where: {
       id: { in: pollIds.map((p) => p.id) },
     },
     include: {
-      votesRelation: {
+      votes: {
         select: {
           choice: true,
         },
@@ -411,7 +411,7 @@ async function handleRandomOrderedQuery({
   const orderedPolls = pollIds.map(({ id }) => pollMap.get(id)!);
 
   return {
-    data: orderedPolls.map(tallyPollVotes),
+    data: orderedPolls.map((poll) => serializePoll(poll, now)),
     randomSeed,
   };
 }
@@ -424,29 +424,31 @@ async function handleTimeOrderedQuery({
   page,
   limit,
   orderDir,
+  now,
 }: {
   filters: any;
   page: number;
   limit: number;
   orderDir?: OrderDir;
+  now: Date;
 }): Promise<Poll[]> {
-  const orderBy = { time: getOrderDirection(orderDir) };
+  const orderBy = { start_time: getOrderDirection(orderDir) };
 
-  return await prisma.polls
+  return await prisma.poll
     .findMany({
       where: filters,
       take: limit,
       skip: (page - 1) * limit,
       orderBy,
       include: {
-        votesRelation: {
+        votes: {
           select: {
             choice: true,
           },
         },
       },
     })
-    .then((polls) => polls.map(tallyPollVotes));
+    .then((polls) => polls.map((poll) => serializePoll(poll, now)));
 }
 
 /**
@@ -472,10 +474,10 @@ export async function getPollById(
   id: number,
   managementOverride: boolean = false
 ): Promise<Poll | null> {
-  const poll = await prisma.polls.findUnique({
+  const poll = await prisma.poll.findUnique({
     where: { id },
     include: {
-      votesRelation: {
+      votes: {
         select: {
           choice: true,
         },
@@ -486,12 +488,10 @@ export async function getPollById(
   if (!poll) return null;
 
   if (!managementOverride) {
-    const { votesRelation, ...restPoll } = poll;
-    const totalVotes = votesRelation.length;
-    return { ...restPoll, votes: null, total_votes: totalVotes };
+    return { ...serializePoll(poll), votes: null };
   }
 
-  return tallyPollVotes(poll);
+  return serializePoll(poll);
 }
 
 /**
@@ -501,12 +501,12 @@ export async function getPollsFromList(
   pollIds: number[],
   managementOverride: boolean = false
 ): Promise<Poll[]> {
-  const polls = await prisma.polls.findMany({
+  const polls = await prisma.poll.findMany({
     where: {
       id: { in: pollIds },
     },
     include: {
-      votesRelation: {
+      votes: {
         select: {
           choice: true,
         },
@@ -516,10 +516,8 @@ export async function getPollsFromList(
 
   return polls.map((poll) => {
     if (managementOverride) {
-      return tallyPollVotes(poll);
+      return serializePoll(poll);
     }
-    const { votesRelation, ...restPoll } = poll;
-    const totalVotes = votesRelation.length;
-    return { ...restPoll, votes: null, total_votes: totalVotes };
+    return { ...serializePoll(poll), votes: null };
   });
 }

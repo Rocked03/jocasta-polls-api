@@ -301,6 +301,46 @@ export async function fetchGuildChannels(
   }
 }
 
+/**
+ * Fetches a guild member's role ids with the bot token. Throws ApiError
+ * (mirroring the Discord status) on any non-success response; unlike the
+ * cached read helpers above, unexpected failures (network, bad payload)
+ * propagate unwrapped so callers can decide the response — the
+ * revalidation middleware maps them to its fail-closed 503. No caching:
+ * callers need per-request freshness.
+ */
+export async function getGuildMemberRoles(
+  guildId: bigint,
+  userId: bigint
+): Promise<bigint[]> {
+  const response = await fetch(
+    `https://discord.com/api/v10/guilds/${guildId}/members/${userId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bot ${config.auth.discord.botToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 403) {
+      throw new ApiError("Bot missing permissions or not in server", 403);
+    }
+    if (response.status === 404) {
+      throw new ApiError("Guild or member not found", 404);
+    }
+    if (response.status === 429) {
+      throw new ApiError("Rate limited by Discord API", 429);
+    }
+    throw new ApiError(`Discord API error: ${response.status}`, 500);
+  }
+
+  const member: DiscordGuildMember = await response.json();
+  return member.roles.map((roleId) => BigInt(roleId));
+}
+
 export async function fetchGuildRoles(
   guildId: string
 ): Promise<FormattedRole[]> {

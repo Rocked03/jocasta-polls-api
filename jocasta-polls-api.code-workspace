@@ -1,14 +1,13 @@
 {
   "folders": [
     {
-      "path": "."
-    }
+      "path": ".",
+    },
   ],
   "settings": {
     "eslint.format.enable": false,
-    "cSpell.words": ["pollstags"],
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true,
-    "editor.formatOnPaste": true
-  }
+    "editor.formatOnPaste": true,
+  },
 }

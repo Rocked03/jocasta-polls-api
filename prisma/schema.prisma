@@ -1,22 +1,20 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
-  previewFeatures = ["fullTextSearchPostgres"]
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-model polls {
-  id                    Int                      @id
+model Poll {
+  id                    Int       @id
   question              String
-  published             Boolean                  @default(false)
-  active                Boolean                  @default(false)
+  published             Boolean   @default(false)
   guild_id              BigInt
   choices               String[]
-  time                  DateTime?                @db.Timestamptz(6)
-// duration              Interval?               // not supported in Prisma yet
+  start_time            DateTime? @db.Timestamptz
+  end_time              DateTime? @db.Timestamptz
   num                   Int?
   message_id            BigInt?
   crosspost_message_ids BigInt[]
@@ -24,25 +22,29 @@ model polls {
   image                 String?
   description           String?
   thread_question       String?
-  show_question         Boolean                  @default(true)
-  show_options          Boolean                  @default(true)
-  show_voting           Boolean                  @default(true)
-  fallback              Boolean                  @default(false)
+  show_question         Boolean   @default(true)
+  show_options          Boolean   @default(true)
+  show_voting           Boolean   @default(true)
+  fallback              Boolean   @default(false)
 
-  votesRelation         pollsvotes[]             @relation("PollVotes")
-  tagRelation           pollstags?               @relation("PollstagsToPolls", fields: [tag], references: [tag])
+  votes       Vote[] @relation
+  tagRelation Tag    @relation(fields: [tag], references: [tag], onDelete: Restrict)
+
+  @@map("polls")
 }
 
-model pollsinfo {
+model GuildSettings {
   guild_id            BigInt   @id
   default_channel_id  BigInt
   manage_channel_id   BigInt[]
   manager_role_id     BigInt[]
   default_colour      Int?
   fallback_channel_id BigInt?
+
+  @@map("guild_settings")
 }
 
-model pollstags {
+model Tag {
   tag                     Int      @id
   name                    String
   guild_id                BigInt
@@ -58,42 +60,19 @@ model pollstags {
   end_message_ping        Boolean  @default(false)
   end_message_self_assign Boolean  @default(false)
   persistent              Boolean  @default(true)
-  
-  pollsRelation           polls[]  @relation("PollstagsToPolls")
+
+  polls Poll[] @relation
+
+  @@map("tags")
 }
 
-model pollsvotes {
-  id      BigInt @id(map: "pollsvotesnew_pkey")
+model Vote {
+  id      BigInt @id(map: "votes_pkey")
   user_id BigInt
   poll_id Int
   choice  Int
-  
-  poll      polls      @relation("PollVotes", fields: [poll_id], references: [id])
-}
 
-/// View mapped model for `polls_view` created in the database.
-/// Read-only; use prisma.$queryRaw or select from this model for conveniences.
-model polls_view {
-  id                    Int      @id
-  question              String
-  published             Boolean
-  active                Boolean
-  guild_id              BigInt
-  choices               String[]
-  time                  DateTime? @db.Timestamptz(6)
-  num                   Int?
-  message_id            BigInt?
-  crosspost_message_ids BigInt[]
-  tag                   Int
-  image                 String?
-  description           String?
-  thread_question       String?
-  show_question         Boolean
-  show_options          Boolean
-  show_voting           Boolean
-  fallback              Boolean
+  poll Poll @relation(fields: [poll_id], references: [id], onDelete: Cascade)
 
-  vote_count            Int
-
-  @@map("polls_view")
+  @@map("votes")
 }
