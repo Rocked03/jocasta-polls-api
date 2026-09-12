@@ -1,8 +1,12 @@
 import config from "@/config";
 import { prisma } from "@/client";
 import { ApiError, BadRequestError, NotFoundError } from "@/errors";
+import { Prisma } from "@/generated/prisma/client";
 import { getPollsFromList } from "@/services/pollReadService";
-import { type PollWithVotes } from "@/services/pollSerializer";
+import {
+  POLL_WITH_VOTES_INCLUDE,
+  type PollWithVotes,
+} from "@/services/pollSerializer";
 import { getTags } from "@/services/tagService";
 import {
   type PollTimeInput,
@@ -14,18 +18,39 @@ import {
 } from "@/utils/validatePoll";
 
 /**
+ * Fields explicitly editable via /update. Everything else on the model
+ * is restricted — a NEW field added to the schema defaults to restricted
+ * until explicitly opted in here (fail-safe against drift).
+ */
+const EDITABLE_UPDATE_FIELDS = new Set<keyof typeof Prisma.PollScalarFieldEnum>(
+  [
+    "id", // lookup key, validated separately
+    "question",
+    "description",
+    "image",
+    "thread_question",
+    "show_question",
+    "show_options",
+    "show_voting",
+    "choices",
+    "tag",
+    "start_time",
+    "end_time",
+  ],
+);
+
+/**
  * Fields that only the lifecycle endpoints may write (publish owns
- * num/message_id/crosspost_message_ids, create owns guild_id and
- * fallback). Their presence in an update body fails loudly with the
+ * num/message_id/crosspost_message_ids/published, create owns guild_id
+ * and fallback), derived from the Prisma model so schema changes can't
+ * drift. Their presence in an update body fails loudly with the
  * designated-endpoint message instead of silently stripping.
  */
-export const RESTRICTED_UPDATE_FIELDS = [
-  "num",
-  "message_id",
-  "crosspost_message_ids",
-  "fallback",
-  "guild_id",
-] as const;
+export const RESTRICTED_UPDATE_FIELDS = (
+  Object.keys(
+    Prisma.PollScalarFieldEnum,
+  ) as (keyof typeof Prisma.PollScalarFieldEnum)[]
+).filter((field) => !EDITABLE_UPDATE_FIELDS.has(field));
 
 export function assertNoRestrictedUpdateFields(input: object): void {
   const record = input as Record<string, unknown>;
@@ -148,14 +173,7 @@ export async function createPolls(
           show_voting: poll.show_voting ?? true,
           fallback: false, // Not client-settable; no API write path
         },
-        include: {
-          tagRelation: true,
-          votes: {
-            select: {
-              choice: true,
-            },
-          },
-        },
+        include: POLL_WITH_VOTES_INCLUDE,
       });
     }),
   );
@@ -246,14 +264,7 @@ export async function updatePolls(
           // Preserve published state from existing poll
           published: existingPoll.published,
         },
-        include: {
-          tagRelation: true,
-          votes: {
-            select: {
-              choice: true,
-            },
-          },
-        },
+        include: POLL_WITH_VOTES_INCLUDE,
       });
     }),
   );
@@ -367,14 +378,7 @@ export async function updatePollsByTag(
             end_time: coerceDate(fields.end_time),
           }),
         },
-        include: {
-          tagRelation: true,
-          votes: {
-            select: {
-              choice: true,
-            },
-          },
-        },
+        include: POLL_WITH_VOTES_INCLUDE,
       }),
     ),
   );

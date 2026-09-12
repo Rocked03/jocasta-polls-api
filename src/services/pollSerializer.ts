@@ -11,6 +11,20 @@ export type PollWithVotes = PollModel & {
 };
 
 /**
+ * The include shape that feeds serializePoll: the vote relation (tallied
+ * per choice) plus the tag relation. Shared by every poll write and
+ * lifecycle query so the serialization contract has one source of truth.
+ */
+export const POLL_WITH_VOTES_INCLUDE = {
+  tagRelation: true,
+  votes: {
+    select: {
+      choice: true,
+    },
+  },
+} as const;
+
+/**
  * Derives poll activity from timestamps: a poll is active when it is
  * published, has started, and has not ended. Open-ended polls (NULL
  * end_time) stay active once started. At `now === end_time` exactly the

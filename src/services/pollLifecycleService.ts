@@ -1,6 +1,9 @@
 import { prisma } from "@/client";
 import { BadRequestError, NotFoundError } from "@/errors";
-import { serializePoll } from "@/services/pollSerializer";
+import {
+  POLL_WITH_VOTES_INCLUDE,
+  serializePoll,
+} from "@/services/pollSerializer";
 import type { Poll } from "@/types";
 
 /**
@@ -10,15 +13,6 @@ import type { Poll } from "@/types";
  * second publish must NOT double-increment the tag counter, a second
  * end must NOT move end_time — and each returns the serialized poll.
  */
-
-const POLL_WITH_VOTES_INCLUDE = {
-  tagRelation: true,
-  votes: {
-    select: {
-      choice: true,
-    },
-  },
-} as const;
 
 async function getPollWithVotes(pollId: number) {
   return prisma.poll.findUnique({

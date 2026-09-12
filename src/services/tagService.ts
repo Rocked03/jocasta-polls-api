@@ -1,5 +1,6 @@
 import { prisma } from "@/client";
 import { BadRequestError, NotFoundError } from "@/errors";
+import { Prisma } from "@/generated/prisma/client";
 import type { Tag } from "@/types";
 
 export interface TagFilterOptions {
@@ -129,20 +130,44 @@ export async function createTag(tagData: TagCreateInput): Promise<Tag> {
 	return createdTag;
 }
 
-export interface TagUpdateInput {
-	name?: string;
-	channel_id?: bigint;
-	crosspost_channels?: bigint[];
-	crosspost_servers?: bigint[];
-	colour?: number | null;
-	end_message?: string | null;
-	end_message_latest_ids?: bigint[];
-	end_message_replace?: boolean;
-	end_message_role_ids?: bigint[];
-	end_message_ping?: boolean;
-	end_message_self_assign?: boolean;
-	persistent?: boolean;
-}
+/**
+ * Tag fields no update may touch: the PK (lookup only), guild_id
+ * (immutable), and current_num (lifecycle-owned counter, incremented
+ * by publish). `satisfies` pins each name to the Prisma model so a
+ * schema rename breaks the build.
+ */
+const TAG_RESTRICTED_FIELDS = [
+	"tag",
+	"guild_id",
+	"current_num",
+] as const satisfies readonly (keyof typeof Prisma.TagScalarFieldEnum)[];
+
+/**
+ * Updatable tag fields, derived from the Prisma model: everything
+ * except the restricted ones. A new model field is updatable only by
+ * not being restricted here.
+ */
+export const TAG_UPDATABLE_FIELDS = (
+	Object.keys(
+		Prisma.TagScalarFieldEnum,
+	) as (keyof typeof Prisma.TagScalarFieldEnum)[]
+).filter(
+	(field) =>
+		!(TAG_RESTRICTED_FIELDS as readonly string[]).includes(field)
+);
+
+export type TagUpdatableField = Exclude<
+	keyof typeof Prisma.TagScalarFieldEnum,
+	(typeof TAG_RESTRICTED_FIELDS)[number]
+>;
+
+/**
+ * Update whitelist keyed on the derived updatable fields with their
+ * model types, all optional.
+ */
+export type TagUpdateInput = Partial<
+	Pick<Prisma.TagModel, TagUpdatableField>
+>;
 
 export async function updateTag(
 	id: number,
@@ -154,6 +179,14 @@ export async function updateTag(
 
 	if (!existing) {
 		throw new NotFoundError(`Tag with id ${id} not found`);
+	}
+
+	for (const key of Object.keys(data)) {
+		if (!TAG_UPDATABLE_FIELDS.includes(key as TagUpdatableField)) {
+			throw new BadRequestError(
+				`'${key}' cannot be set via tag update`
+			);
+		}
 	}
 
 	return prisma.tag.update({

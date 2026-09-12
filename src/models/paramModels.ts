@@ -1,4 +1,5 @@
 import { BadRequestError } from "@/errors";
+import type { TagUpdatableField } from "@/services/tagService";
 import type { Poll, Tag, Vote } from "@/types";
 import { z } from "zod";
 import { OrderType, OrderDir } from "@/types";
@@ -344,6 +345,20 @@ export interface ParsedUpdateTagBody {
   end_message_self_assign?: boolean;
   persistent?: boolean;
 }
+
+/**
+ * Drift guard tying the hand-written zod body (kept for its coercion
+ * specifics) to the Prisma-derived whitelist in tagService: every
+ * update key it parses besides the tag lookup must be an updatable
+ * model field, so a schema rename breaks the build here instead of
+ * silently diverging from the whitelist.
+ */
+export const _updateTagBodyKeysAreUpdatable: [Exclude<
+  keyof ParsedUpdateTagBody,
+  "tag" | TagUpdatableField
+>] extends [never]
+  ? true
+  : never = true;
 
 export function parseUpdateTagBody(body: unknown): ParsedUpdateTagBody {
   const result = UpdateTagBodyModel.safeParse(body);
